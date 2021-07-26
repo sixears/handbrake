@@ -86,6 +86,7 @@ import Data.Text  ( pack )
 
 import qualified HandBrake.Paths  as  Paths
 
+import HandBrake.Encode   ( EncodeRequest )
 import HandBrake.Options  ( Options( Scan ), parseOptions )
 
 --------------------------------------------------------------------------------
@@ -106,6 +107,23 @@ scan f n do_mock = do
 
 ----------------------------------------
 
+-- encode
+-- --input <FILENAME|DEVICE> --title <TITLE#>
+-- outfn: NAME.MKV, prepend with %02d- (inputoffset+TITLE#)  unless nonumber
+--          NAME must have /: replaced with --; HandBrakeCLI crashes if
+--          outputting to a file with ':' in the name
+--        If a Series is given, then %s - %02dx%02d - %s.mkv (remember /:)
+--             or %s - %02dx%02d if no episode name
+--        More title chaos for chapters
+-- ? --chapters CHAPTERS
+-- -2 -T if TwoPass (default?)
+-- --markers --preset PROFILE --deinterlace --audio AUDIO,AUDIO,…
+-- --subtitle SUB,SUB,… --subtitle-default DEFAULT_SUB
+-- ? --quality FLOAT
+-- -E copy if AudioCopy
+
+----------------------------------------
+
 myMain ∷ ∀ ε .
          (HasCallStack, Printable ε,
           AsIOError ε, AsProcExitError ε, AsCreateProcError ε, AsFPathError ε) ⇒
@@ -116,6 +134,7 @@ myMain dry_run opts = do
   case opts of
     Scan f n → scan f n do_mock
 
+----------------------------------------
 
 main ∷ IO ()
 main = let progDesc = "HandBrakeCLI wrapper"
