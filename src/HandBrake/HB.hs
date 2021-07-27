@@ -4,12 +4,14 @@ where
 
 -- base --------------------------------
 
-import Control.Monad  ( return )
-import Data.Maybe     ( maybe )
-import Data.Word      ( Word8 )
-import GHC.Stack      ( HasCallStack )
-import System.IO      ( IO )
-import Text.Show      ( show )
+import Control.Applicative  ( pure )
+import Control.Monad        ( return )
+import Data.Function        ( (&) )
+import Data.Maybe           ( maybe )
+import Data.Word            ( Word8 )
+import GHC.Stack            ( HasCallStack )
+import System.IO            ( IO )
+import Text.Show            ( show )
 
 -- base-unicode-symbols ----------------
 
@@ -22,6 +24,7 @@ import Data.Textual  ( Printable, toText )
 
 -- fpath -------------------------------
 
+import FPath.AbsDir            ( AbsDir )
 import FPath.Error.FPathError  ( AsFPathError )
 import FPath.File              ( File )
 
@@ -56,10 +59,13 @@ import MonadIO                        ( MonadIO )
 import MonadIO.Error.CreateProcError  ( AsCreateProcError )
 import MonadIO.Error.ProcExitError    ( AsProcExitError )
 import MonadIO.File                   ( devnull )
+import MonadIO.FPath                  ( getCwd )
+import MonadIO.Process.CmdSpec        ( cwd )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Maybe  ( 𝕄 )
+import Data.MoreUnicode.Lens   ( (⊩) )
+import Data.MoreUnicode.Maybe  ( 𝕄, pattern 𝕹 )
 import Data.MoreUnicode.Monad  ( (≫) )
 
 -- mtl ---------------------------------
@@ -74,7 +80,7 @@ import Natural  ( ℕ, One, count )
 
 import StdMain             ( stdMain'' )
 import StdMain.StdOptions  ( DryRunLevel )
-import StdMain.UsageError  ( UsageFPProcIOError )
+import StdMain.UsageError  ( AsUsageError, UsageFPProcIOError )
 
 -- text --------------------------------
 
@@ -86,8 +92,8 @@ import Data.Text  ( pack )
 
 import qualified HandBrake.Paths  as  Paths
 
-import HandBrake.Encode   ( EncodeRequest )
-import HandBrake.Options  ( Options( Scan ), parseOptions )
+import HandBrake.Encode   ( encodeRequest, encodeArgs )
+import HandBrake.Options  ( Options( Encode, Scan ), parseOptions )
 
 --------------------------------------------------------------------------------
 
@@ -107,25 +113,24 @@ scan f n do_mock = do
 
 ----------------------------------------
 
--- encode
--- --input <FILENAME|DEVICE> --title <TITLE#>
--- outfn: NAME.MKV, prepend with %02d- (inputoffset+TITLE#)  unless nonumber
---          NAME must have /: replaced with --; HandBrakeCLI crashes if
---          outputting to a file with ':' in the name
---        If a Series is given, then %s - %02dx%02d - %s.mkv (remember /:)
---             or %s - %02dx%02d if no episode name
---        More title chaos for chapters
--- ? --chapters CHAPTERS
--- -2 -T if TwoPass (default?)
--- --markers --preset PROFILE --deinterlace --audio AUDIO,AUDIO,…
--- --subtitle SUB,SUB,… --subtitle-default DEFAULT_SUB
--- ? --quality FLOAT
--- -E copy if AudioCopy
+encode ∷ ∀ ε μ .
+       (MonadIO μ,
+        AsUsageError ε, AsIOError ε, AsFPathError ε, AsCreateProcError ε,
+        AsProcExitError ε,
+        MonadError ε μ, Printable ε,
+        MonadLog (Log MockIOClass) μ) ⇒
+       AbsDir → File → DoMock → μ Word8
+encode d f do_mock = do
+  let req = encodeRequest f 1 𝕹 (pure 1) []
+  args ← encodeArgs req
+  let cmd  = (mkMLCmdW' Paths.handbrakeCLI args do_mock) & cwd ⊩ d
+  (_,()) ← devnull ≫ \null → null ! cmd
+  return 0
 
 ----------------------------------------
 
 myMain ∷ ∀ ε .
-         (HasCallStack, Printable ε,
+         (HasCallStack, Printable ε, AsUsageError ε,
           AsIOError ε, AsProcExitError ε, AsCreateProcError ε, AsFPathError ε) ⇒
          DryRunLevel One → Options
        → LoggingT (Log MockIOClass) (ExceptT ε IO) Word8
@@ -133,6 +138,7 @@ myMain dry_run opts = do
   let do_mock = if 0 ≢ count dry_run then DoMock else NoMock
   case opts of
     Scan f n → scan f n do_mock
+    Encode f → getCwd ≫ \ d → encode d f do_mock
 
 ----------------------------------------
 

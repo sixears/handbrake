@@ -210,18 +210,18 @@ encodeArgs ∷ (AsUsageError ε, MonadError ε η) ⇒ EncodeRequest → η [�
 encodeArgs er = do
   output ← case er ⊣ numbering of
              NoNumber     → case nameSafe er of
-                              𝕵 n → return $ [fmt|%t.mkv|] n
+                              𝕵 n → return $ [fmtT|%t.mkv|] n
                               𝕹   → throwUsage $ [fmtT|no number & no title|]
              Number       → do output_num ← outputNum er 𝕹
                                case nameSafe er of
-                                 𝕵 n → return $ [fmt|%02d-%t.mkv|] output_num n
-                                 𝕹   → return $ [fmt|%02d.mkv|]    output_num
+                                 𝕵 n → return $ [fmtT|%02d-%t.mkv|] output_num n
+                                 𝕹   → return $ [fmtT|%02d.mkv|]    output_num
              Series nm ss → do output_num ← outputNum er 𝕹
                                case nameSafe er of
-                                 𝕵 n → return $ [fmt|%t - %02dx%02d - %t.mkv|]
-                                                     nm   ss    output_num n
-                                 𝕹   → return $ [fmt|%t - %02dx%02d.mkv|]
-                                                     nm   ss    output_num
+                                 𝕵 n → return $ [fmtT|%t - %02dx%02d - %t.mkv|]
+                                                      nm   ss    output_num n
+                                 𝕹   → return $ [fmtT|%t - %02dx%02d.mkv|]
+                                                      nm   ss    output_num
 
   return $ ю [ [ "--input" , toText $ er ⊣ input
                , "--title" , pack (show $ er ⊣ title)
@@ -248,7 +248,7 @@ encodeArgs er = do
                  𝕹   → []
              , maybe [] (\ cs → ["--chapters", [fmt|%L|] (show ⊳ cs)])
                         (er ⊣ chapters)
-             , [ "--output", output ]
+             , [ "--output", toText output ]
              ]
 
 -- that's all, folks! ----------------------------------------------------------

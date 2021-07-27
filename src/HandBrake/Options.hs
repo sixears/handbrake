@@ -1,11 +1,15 @@
 module HandBrake.Options
-  ( Options( {- Encode, -} Scan ), parseOptions )
+  ( Options( Encode, Scan ), parseOptions )
 where
 
 -- base --------------------------------
 
 import Control.Applicative   ( optional )
 import Data.Function         ( ($) )
+
+-- base-unicode-symbols ----------------
+
+import Data.Monoid.Unicode  ( (⊕) )
 
 -- fpath -------------------------------
 
@@ -35,7 +39,7 @@ import Options.Applicative.Types    ( Parser, ParserInfo )
 --------------------------------------------------------------------------------
 
 data Options = Scan File (𝕄 ℕ)
---             | Encode { _input ∷ File }
+             | Encode { _input ∷ File }
 
 -- input ∷ Lens' Options File
 -- input = lens _input (\ o i → o { _input = i })
@@ -52,8 +56,8 @@ parseScan = info parseScanArgs (progDesc "scan a video file")
 parseOptions ∷ Parser Options
 parseOptions =
   subparser
-    (command "scan" parseScan
---           ⊕ command "encode" (info (Encode ⊳ argument readM (metavar "HOSTS.dhall")) (progDesc "e"))
+    ( command "scan" parseScan
+    ⊕ command "encode" (info (Encode ⊳ argument readM (metavar "HOSTS.dhall")) (progDesc "e"))
            )
 
 -- that's all, folks! ----------------------------------------------------------
