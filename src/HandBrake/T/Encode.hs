@@ -45,13 +45,13 @@ import TastyPlus  ( (≟), assertLeft, assertListEqR
 --                     local imports                      --
 ------------------------------------------------------------
 
-import HandBrake.Encode  ( AudioCopy( NoAudioCopy )
+import HandBrake.Encode  ( AudioCopy( NoAudioCopy ), AudioTracks( AudioTracks )
                          , Numbering( NoNumber, Series )
                          , Profile( ProfileH265_576P, ProfileH265_720P )
                          , TwoPass( NoTwoPass )
                          , audioCopy, audios, chapters, encodeArgs
                          , encodeRequest, input, inputOffset, name, numbering
-                         , profile, quality, subtitles, title, twoPass
+                         , profile, quality, subtitles, titleID, twoPass
                          )
 
 --------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ tests =
       testEncode nm req exp =
         testGroup nm $ assertListEqR nm (encodeArgs @UsageError req) exp
       base_req = encodeRequest (FileA [absfile|/nonesuch|]) 3 (𝕵 "bob")
-                               (pure 2) [3,4]
+                               (AudioTracks $ pure 2) [3,4]
       usage_error nm txt req =
         testCase nm $
           assertLeft (usageError @𝕋 @UsageError txt ≟) (encodeArgs req)
@@ -167,7 +167,7 @@ tests =
                  , "--subtitle", "3,4", "--subtitle-default=0"
                  , "--output"  , "03-bob.mkv"
                  ]
-    , testEncode "audios 8,9" (base_req & audios ⊢ 8 :| [9] )
+    , testEncode "audios 8,9" (base_req & audios ⊢ AudioTracks (8 :| [9]) )
                  [ "--input"   , "/nonesuch"
                  , "--title"   , "3"
                  , "--markers"
@@ -231,14 +231,14 @@ tests =
                   (base_req & name ⊢ 𝕹 & numbering ⊢ NoNumber)
     , testEncode "altogether now"
                  (base_req & input ⊢ FileR [relfile|not-here|]
-                           & title ⊢ 5
+                           & titleID ⊢ 5
                            & inputOffset ⊢ 1
                            & numbering ⊢ Series "T" 7
                            & name ⊢ 𝕹
                            & chapters ⊩ [8,9]
                            & twoPass ⊢ NoTwoPass
                            & profile ⊢ ProfileH265_720P
-                           & audios ⊢ 2 :| [1]
+                           & audios ⊢ AudioTracks (2 :| [1])
                            & subtitles ⊢ []
                            & quality ⊩ 26
                            & audioCopy ⊢ NoAudioCopy)

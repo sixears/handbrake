@@ -5,8 +5,9 @@ where
 -- base --------------------------------
 
 import Control.Applicative  ( pure )
-import Control.Monad        ( return )
-import Data.Function        ( (&) )
+import Control.Monad        ( foldM, return )
+import Data.Function        ( ($), (&) )
+import Data.List.NonEmpty   ( NonEmpty, toList )
 import Data.Maybe           ( maybe )
 import Data.Word            ( Word8 )
 import GHC.Stack            ( HasCallStack )
@@ -64,9 +65,10 @@ import MonadIO.Process.CmdSpec        ( cwd )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Lens   ( (⊩) )
-import Data.MoreUnicode.Maybe  ( 𝕄, pattern 𝕹 )
+import Data.MoreUnicode.Lens   ( (⊢), (⊩) )
+import Data.MoreUnicode.Maybe  ( 𝕄, pattern 𝕵 )
 import Data.MoreUnicode.Monad  ( (≫) )
+import Data.MoreUnicode.Text   ( 𝕋 )
 
 -- mtl ---------------------------------
 
@@ -92,7 +94,8 @@ import Data.Text  ( pack )
 
 import qualified HandBrake.Paths  as  Paths
 
-import HandBrake.Encode   ( encodeRequest, encodeArgs )
+import HandBrake.Encode   ( AudioTracks( AudioTracks ), EncodeDetails
+                          , encodeRequest, details, encodeArgs )
 import HandBrake.Options  ( Options( Encode, Scan ), parseOptions )
 
 --------------------------------------------------------------------------------
@@ -119,13 +122,40 @@ encode ∷ ∀ ε μ .
         AsProcExitError ε,
         MonadError ε μ, Printable ε,
         MonadLog (Log MockIOClass) μ) ⇒
-       AbsDir → File → DoMock → μ Word8
-encode d f do_mock = do
-  let req = encodeRequest f 1 𝕹 (pure 1) []
+       AbsDir → File → ℕ → 𝕋 → EncodeDetails → DoMock → μ Word8
+encode output_dir file stream_id name ds do_mock = do
+  let req = encodeRequest file stream_id (𝕵 name) (AudioTracks $ pure 1) [] & details ⊢ ds
   args ← encodeArgs req
-  let cmd  = (mkMLCmdW' Paths.handbrakeCLI args do_mock) & cwd ⊩ d
+  let cmd  = (mkMLCmdW' Paths.handbrakeCLI args do_mock) & cwd ⊩ output_dir
   (_,()) ← devnull ≫ \null → null ! cmd
   return 0
+
+----------------------------------------
+
+{- | Perform one encode, iff input exit value (expected to be the exit of prior
+     encodes) is not zero. -}
+encode1 ∷ (MonadIO μ,
+           AsUsageError ε, AsIOError ε, AsFPathError ε,
+           AsCreateProcError ε, AsProcExitError ε,
+           MonadError ε μ, Printable ε,
+           MonadLog (Log MockIOClass) μ) ⇒
+          AbsDir → File → EncodeDetails → DoMock → Word8 → (ℕ,𝕋) → μ Word8
+encode1 wd input os do_mock x (n,t) =
+  case x of
+    0 → encode wd input n t os do_mock
+    _ → return x
+
+--------------------
+
+{- | Encode multiple titles from a single input file. -}
+encodes ∷ ∀ ε μ .
+          (MonadIO μ, Printable ε, MonadError ε μ,
+           AsUsageError ε, AsIOError ε, AsFPathError ε, AsCreateProcError ε,
+           AsProcExitError ε,
+           MonadLog (Log MockIOClass) μ) ⇒
+          File → NonEmpty (ℕ,𝕋) → EncodeDetails → DoMock → μ Word8
+encodes input ts os do_mock =
+  getCwd ≫ \ wd → foldM (encode1 wd input os do_mock) 0 (toList ts)
 
 ----------------------------------------
 
@@ -137,8 +167,8 @@ myMain ∷ ∀ ε .
 myMain dry_run opts = do
   let do_mock = if 0 ≢ count dry_run then DoMock else NoMock
   case opts of
-    Scan f n → scan f n do_mock
-    Encode f → getCwd ≫ \ d → encode d f do_mock
+    Scan   f n     → scan f n do_mock
+    Encode f ts ds → encodes f ts ds do_mock
 
 ----------------------------------------
 
