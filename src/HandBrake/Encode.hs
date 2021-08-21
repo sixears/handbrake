@@ -12,17 +12,17 @@ module HandBrake.Encode
   )
 where
 
-import Prelude  ( Float, (+), fromIntegral )
+import Prelude  ( Float, (+), (-), fromIntegral )
 
 -- base --------------------------------
 
 import Control.Applicative  ( optional, pure, some )
-import Control.Monad        ( return )
+import Control.Monad        ( mapM, return )
 import Data.Eq              ( Eq )
 import Data.Function        ( ($), id )
 import Data.List.NonEmpty   ( NonEmpty( (:|) ) )
 import Data.Maybe           ( maybe )
-import Data.Ord             ( (<) )
+import Data.Ord             ( Ordering( GT, EQ, LT ), (<), compare )
 import Data.String          ( unwords )
 import GHC.Generics         ( Generic )
 import Text.Read            ( read )
@@ -30,6 +30,7 @@ import Text.Show            ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
+import Data.Eq.Unicode          ( (≡) )
 import Data.Function.Unicode    ( (∘) )
 import Data.Monoid.Unicode      ( (⊕) )
 import Numeric.Natural.Unicode  ( ℕ )
@@ -61,7 +62,7 @@ import Control.Lens.Lens  ( Lens', lens )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Applicative  ( (⋪), (⊵), (∤) )
+import Data.MoreUnicode.Applicative  ( (⋪), (⋫), (⊵), (∤) )
 import Data.MoreUnicode.Functor      ( (⊳) )
 import Data.MoreUnicode.Lens         ( (⊣) )
 import Data.MoreUnicode.Maybe        ( 𝕄, pattern 𝕵, pattern 𝕹 )
@@ -73,10 +74,6 @@ import Data.MoreUnicode.Text         ( 𝕋 )
 
 import Control.Monad.Except  ( MonadError )
 
--- nonempty-containers -----------------
-
-import Data.Set.NonEmpty  ( NESet, fromList, toAscList )
-
 -- optparse-applicative ----------------
 
 import Options.Applicative.Builder  ( auto, flag, flag', help
@@ -85,7 +82,7 @@ import Options.Applicative.Types    ( Parser )
 
 -- optparse-plus -----------------------
 
-import OptParsePlus  ( parsecReader, parsecReadM, readNT, readMCommaSet )
+import OptParsePlus  ( parsecReader, parsecReadM, readNT )
 
 -- parsec-plus -------------------------
 
@@ -99,6 +96,14 @@ import Text.Parser.Combinators  ( sepBy, eof )
 -- parser-plus -------------------------
 
 import ParserPlus  ( parseFloat2_1, sepByNE, tries )
+
+-- range -------------------------------
+
+import Data.Range  ( Bound( Bound ), BoundType( Exclusive, Inclusive ),
+                     Range( InfiniteRange, LowerBoundRange, SingletonRange
+                          , SpanRange, UpperBoundRange )
+                   , (+=+)
+                   )
 
 -- stdmain -----------------------------
 
@@ -187,27 +192,60 @@ parseProfile =
 
 ------------------------------------------------------------
 
-newtype Chapters = Chapters { unChapters ∷ 𝕄 (NESet ℕ) }
+newtype Chapters = Chapters { unChapters ∷ 𝕄 (Range ℕ) }
 
 instance Show Chapters where
-  show (Chapters 𝕹)        = "«»"
-  show (Chapters (𝕵 (cs))) = [fmt|«%L»|] (show ⊳ toAscList cs)
+  show c = [fmt|Chapters «%T»|] c
+
+instance Printable Chapters where
+  print (Chapters 𝕹)                       = P.text ""
+  print (Chapters (𝕵 (SingletonRange n)))  = P.text $ [fmt|%d|] n
+  print (Chapters (𝕵 (InfiniteRange)))     = P.text $ [fmt|-|]
+  print (Chapters (𝕵 (LowerBoundRange (Bound a Inclusive)))) =
+    P.text $ [fmt|[%d-|] a
+  print (Chapters (𝕵 (LowerBoundRange (Bound a Exclusive)))) =
+    P.text $ [fmt|(%d-|] a
+  print (Chapters (𝕵 (UpperBoundRange (Bound a Inclusive)))) =
+    P.text $ [fmt|-%d]|] a
+  print (Chapters (𝕵 (UpperBoundRange (Bound a Exclusive)))) =
+    P.text $ [fmt|-%d)|] a
+  print (Chapters (𝕵 (SpanRange (Bound a Inclusive) (Bound b Inclusive)))) =
+    P.text $ [fmt|[%d-%d]|] a b
+  print (Chapters (𝕵 (SpanRange (Bound a Exclusive) (Bound b Inclusive)))) =
+    P.text $ [fmt|(%d-%d]|] a b
+  print (Chapters (𝕵 (SpanRange (Bound a Inclusive) (Bound b Exclusive)))) =
+    P.text $ [fmt|[%d-%d)|] a b
+  print (Chapters (𝕵 (SpanRange (Bound a Exclusive) (Bound b Exclusive)))) =
+    P.text $ [fmt|(%d-%d)|] a b
+
+parseSimpleNRange ∷ CharParsing γ ⇒ γ (Range ℕ)
+parseSimpleNRange =
+  let readN ∷ CharParsing γ ⇒ γ ℕ
+      readN = read ⊳ some digit
+      toRange ∷ ℕ → 𝕄 ℕ → Range ℕ
+      toRange a 𝕹     = SingletonRange a
+      toRange a (𝕵 b) = a +=+ b
+   in toRange ⊳ readN ⊵ optional (char '-' ⋫ readN)
 
 instance Parsecable Chapters where
-  parser = Chapters ∘ 𝕵 ∘ fromList ⊳ sepByNE (read ⊳ some digit) (char ',')
+  parser = Chapters ∘ 𝕵 ⊳ parseSimpleNRange
 
 parseChapters ∷ Parser Chapters
 parseChapters =
-  let reader = readMCommaSet "-c|--chapters" (read ⊳ some digit)
-      mods   = short 'c' ⊕ long "chapters" ⊕ help "select chapters to encode"
-   in Chapters ⊳ (optional $ option reader mods)
+  option parsecReader (ю [ short 'c', long "chapters"
+                         , help "select chapters to encode" ])
 
 ------------------------------------------------------------
 
-parseQuality ∷ Parser (𝕄 Float)
-parseQuality = option (𝕵 ⊳ parsecReadM "-q" parseFloat2_1)
-                      (ю [ short 'q', long "quality", value 𝕹
-                         , help "encoding quality (default 20)" ])
+defaultQuality ∷ Float
+defaultQuality = 26
+
+parseQuality ∷ Parser Float
+parseQuality =
+  option (parsecReadM "-q" parseFloat2_1)
+         (ю [ short 'q', long "quality", value defaultQuality
+            , help $ [fmt|encoding quality (default %3.1f)|] defaultQuality
+            ])
 
 ----------------------------------------
 
@@ -231,7 +269,7 @@ data EncodeOptions = EncodeOptions { _numbering   ∷ Numbering
                                    , _twoPass     ∷ TwoPass
                                    , _profile     ∷ Profile
                                    -- 20 is default, use 26 for 1080p
-                                   , _quality     ∷ 𝕄 Float
+                                   , _quality     ∷ Float
                                    , _audioCopy   ∷ AudioCopy
                                    , _outputName  ∷ 𝕄 PathComponent
                                    }
@@ -249,7 +287,7 @@ class HasEncodeOptions α where
   twoPass        = _EncodeOptions ∘ twoPass
   profile        ∷ Lens' α Profile
   profile        = _EncodeOptions ∘ profile
-  quality        ∷ Lens' α (𝕄 Float)
+  quality        ∷ Lens' α Float
   quality        = _EncodeOptions ∘ quality
   audioCopy      ∷ Lens' α AudioCopy
   audioCopy      = _EncodeOptions ∘ audioCopy
@@ -438,7 +476,7 @@ encodeRequest i d t n as =
                         , _chapters    = Chapters 𝕹
                         , _twoPass     = TwoPass
                         , _profile     = ProfileH265_2160P
-                        , _quality     = 𝕹
+                        , _quality     = defaultQuality
                         , _audioCopy   = AudioCopy
                         , _outputName  = 𝕹
                         }
@@ -492,6 +530,7 @@ encodeArgs ∷ ∀ ε η . (AsUsageError ε, AsFPathError ε, MonadError ε η) 
              EncodeRequest → η ([𝕋],AbsFile)
 encodeArgs er = do
   output ← erOutput er
+  cs     ← mapM formatBoundedNRange (unChapters $ er ⊣ chapters)
   let args = ю [ [ "--input" , toText $ er ⊣ input
                  , "--title" , pack (show $ er ⊣ titleID)
                  , "--markers" -- chapter markers
@@ -512,13 +551,55 @@ encodeArgs er = do
                           -- index into the list provided to --subtitle.  If
                           -- this doesn't work, maybe it's 1-based…
                         , "--subtitle-default", "0" ]
-               , case er ⊣ quality of
-                   𝕵 q → [ "--quality", [fmt|%2.1f|] q ]
-                   𝕹   → []
-               , maybe [] (\ c → ["--chapters", [fmt|%L|] (show ⊳ toAscList c)])
-                          (unChapters $ er ⊣ chapters)
+               , [ "--quality", [fmt|%03.1f|] (er ⊣ quality) ]
+               , maybe [] (\ c → ["--chapters" , [fmt|%t|] c]) cs
                , [ "--output", toText output ]
                ]
   return (args,output)
+
+{- | Take a range, which must be a single SingletonRange or a single SpanRange,
+     and format that as `x` or `y-z`.  For a span range, the lower bound must be less than or equal to the upper bound;XXX  -}
+formatBoundedNRange ∷ (AsUsageError ε, MonadError ε μ) ⇒ Range ℕ → μ 𝕋
+formatBoundedNRange InfiniteRange      = throwUsage $ [fmtT|illegal range «-»|]
+formatBoundedNRange (SingletonRange n) = return $ [fmt|«%d»|] n
+formatBoundedNRange (LowerBoundRange (Bound a Inclusive)) =
+  throwUsage $ [fmtT|illegal range «[%d-»|] a
+formatBoundedNRange (LowerBoundRange (Bound a Exclusive)) =
+  throwUsage $ [fmtT|illegal range «(%d-»|] a
+formatBoundedNRange (UpperBoundRange (Bound a Inclusive)) =
+  throwUsage $ [fmtT|illegal range «-%d]»|] a
+formatBoundedNRange (UpperBoundRange (Bound a Exclusive)) =
+  throwUsage $ [fmtT|illegal range «-%d)»|] a
+formatBoundedNRange (SpanRange (Bound a Inclusive) (Bound b Inclusive)) =
+  case compare a b of
+    LT → return $ [fmt|%d-%d|] a b
+    EQ → return $ [fmt|%d|] a
+    GT → throwUsage $ [fmtT|Range [%d-%d] is inverted|] a b
+formatBoundedNRange (SpanRange (Bound a Exclusive) (Bound b Inclusive)) =
+  case compare (a+1) b of
+    LT → return $ [fmt|%d-%d|] (a+1) b
+    EQ → return $ [fmt|%d|] b
+    GT → throwUsage $ [fmtT|Range (%d-%d] is inverted|] a b
+formatBoundedNRange (SpanRange (Bound a Inclusive) (Bound b Exclusive)) =
+  if b ≡ 0
+  then throwUsage $ [fmtT|Range [%d-%d) is illegal|] a b
+  else case compare a (b-1) of
+         LT → return $ [fmt|%d-%d|] a (b-1)
+         EQ → return $ [fmt|%d|] a
+         GT → throwUsage $ [fmtT|Range [%d-%d) is inverted|] a b
+formatBoundedNRange (SpanRange (Bound a Exclusive) (Bound b Exclusive)) =
+  if b ≡ 0
+  then throwUsage $ [fmtT|Range [%d-%d) is illegal|] a b
+  else case compare (a+1) (b-1) of
+         LT → return $ [fmt|%d-%d|] (a+1) (b-1)
+         EQ → return $ [fmt|%d|] (a+1)
+         GT → throwUsage $ [fmtT|Range (%d-%d) is inverted|] a b
+{-
+  show (Chapters (𝕵 (LowerBoundRange a))) = [fmt|«%d-»|] (boundValue a)
+  show (Chapters (𝕵 (UpperBoundRange a))) = [fmt|«-%d»|] (boundValue a)
+  show (Chapters (𝕵 (InfiniteRange)))     = [fmt|«-»|]
+  show (Chapters (𝕵 (SpanRange a b)))     =
+    [fmt|«%d-%d»|] (boundValue a) (boundValue b)
+-}
 
 -- that's all, folks! ----------------------------------------------------------

@@ -11,10 +11,6 @@ import Data.Tuple           ( fst )
 import System.Exit          ( ExitCode )
 import System.IO            ( IO )
 
--- base-unicode-symbols ----------------
-
-import Data.Function.Unicode  ( (∘) )
-
 -- fpath -------------------------------
 
 import FPath.AbsDir         ( absdir, root )
@@ -30,9 +26,10 @@ import Data.MoreUnicode.Natural  ( ℕ )
 import Data.MoreUnicode.String   ( 𝕊 )
 import Data.MoreUnicode.Text     ( 𝕋 )
 
--- nonempty-containers -----------------
+-- range -------------------------------
 
-import Data.Set.NonEmpty  ( fromList )
+import Data.Range  ( Bound( Bound ), BoundType( Inclusive )
+                   , Range( LowerBoundRange ), (+=+) )
 
 -- stdmain -----------------------------
 
@@ -74,7 +71,8 @@ tests =
   testGroup "Encode" $
     let
       testEncode nm req exp =
-        testGroup nm $ assertListEqR nm (fst ⊳ encodeArgs @UsageFPathIOError req) exp
+        testGroup nm $
+          assertListEqR nm (fst ⊳ encodeArgs @UsageFPathIOError req) exp
       base_req = encodeRequest [absfile|/nonesuch|] root 3 (𝕵 "bob")
                                (AudioTracks $ pure 2)
                    & subtitles ⊢ (SubtitleTracks [3,4])
@@ -92,6 +90,7 @@ tests =
                  , "--aencoder", "copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "inputOffset 2" (base_req & numbering ⊢ Number 2)
@@ -104,6 +103,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/05-bob.mkv"
                  ]
     , usage_error "inputOffset -3"
@@ -119,6 +119,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/bob.mkv"
                  ]
     , testEncode "Series S 5" (base_req & numbering ⊢ Series (5,"S") 0)
@@ -131,6 +132,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/S - 05x03 - bob.mkv"
                  ]
     , testEncode "Series S 6, no name"
@@ -144,10 +146,11 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/S - 06x04.mkv"
                  ]
     , testEncode "chapters 6,7" (base_req & chapters
-                                          ⊢ (Chapters ∘ 𝕵 ∘ fromList $6 :| [7]))
+                                          ⊢ (Chapters $ 𝕵 (6 +=+ 7)))
                  [ "--input"   , "/nonesuch"
                  , "--title"   , "3"
                  , "--markers"
@@ -157,7 +160,8 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
-                 , "--chapters", "6,7"
+                 , "--quality" , "26.0"
+                 , "--chapters", "6-7"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "no two pass" (base_req & twoPass ⊢ NoTwoPass)
@@ -169,6 +173,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "profile 576" (base_req & profile ⊢ ProfileH265_576P)
@@ -181,6 +186,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "audios 8,9" (base_req & audios ⊢ AudioTracks (8 :| [9]) )
@@ -193,6 +199,7 @@ tests =
                  , "--aencoder","copy"
                  , "--audio"   , "8,9"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "no subs" (base_req & subtitles ⊢ SubtitleTracks [] )
@@ -204,9 +211,10 @@ tests =
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
                  , "--audio"   , "2"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
-    , testEncode "quality 22.5" (base_req & quality ⊩ 22.5 )
+    , testEncode "quality 22.5" (base_req & quality ⊢ 22.5 )
                  [ "--input"   , "/nonesuch"
                  , "--title"   , "3"
                  , "--markers"
@@ -228,6 +236,7 @@ tests =
                  , "--preset", "H.265 MKV 2160p60"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "no name" (base_req & name ⊢ 𝕹)
@@ -240,11 +249,15 @@ tests =
                  , "--aencoder", "copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/03.mkv"
                  ]
     , usage_error "no name, no number"
                   "no number & no title"
                   (base_req & name ⊢ 𝕹 & numbering ⊢ NoNumber)
+    , usage_error "illegal range"
+                  "illegal range «[7-»"
+                  (base_req & chapters ⊢ Chapters (𝕵 $ LowerBoundRange (Bound 7 Inclusive)))
     , testEncode "outputDir " (base_req & outputDir ⊢ [absdir|/out/|])
                  [ "--input"   , "/nonesuch"
                  , "--title"   , "3"
@@ -255,6 +268,7 @@ tests =
                  , "--aencoder", "copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/out/03-bob.mkv"
                  ]
     , testEncode "outputName " (base_req & outputName ⊩ [pc|output.mkv|])
@@ -267,6 +281,7 @@ tests =
                  , "--aencoder", "copy"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
                  , "--output"  , "/output.mkv"
                  ]
     , testEncode "altogether now"
@@ -274,12 +289,12 @@ tests =
                            & titleID ⊢ 5
                            & numbering ⊢ Series (7,"T") 1
                            & name ⊢ 𝕹
-                           & chapters ⊢ Chapters (𝕵 ∘ fromList $ 8 :| [9])
+                           & chapters ⊢ Chapters (𝕵 $ 7 +=+ 9)
                            & twoPass ⊢ NoTwoPass
                            & profile ⊢ ProfileH265_720P
                            & audios ⊢ AudioTracks (2 :| [1])
                            & subtitles ⊢ SubtitleTracks []
-                           & quality ⊩ 26
+                           & quality ⊢ 26
                            & audioCopy ⊢ NoAudioCopy
                            & outputDir ⊢ [absdir|/outdir/|]
                            & outputName ⊩ [pc|out.mkv|])
@@ -290,7 +305,7 @@ tests =
                  , "--preset", "H.265 MKV 720p30"
                  , "--audio"   , "2,1"
                  , "--quality" , "26.0"
-                 , "--chapters", "8,9"
+                 , "--chapters", "7-9"
                  , "--output"  , "/outdir/out.mkv"
                  ]
     ]
