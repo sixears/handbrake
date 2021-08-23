@@ -11,6 +11,10 @@ import Data.Tuple           ( fst )
 import System.Exit          ( ExitCode )
 import System.IO            ( IO )
 
+-- base-unicode-symbols ----------------
+
+import Data.Function.Unicode  ( (∘) )
+
 -- fpath -------------------------------
 
 import FPath.AbsDir         ( absdir, root )
@@ -29,7 +33,7 @@ import Data.MoreUnicode.Text     ( 𝕋 )
 -- range -------------------------------
 
 import Data.Range  ( Bound( Bound ), BoundType( Inclusive )
-                   , Range( LowerBoundRange ), (+=+) )
+                   , Range( LowerBoundRange, SingletonRange ), (+=+) )
 
 -- stdmain -----------------------------
 
@@ -162,6 +166,21 @@ tests =
                  , "--subtitle", "3,4", "--subtitle-default", "0"
                  , "--quality" , "26.0"
                  , "--chapters", "6-7"
+                 , "--output"  , "/03-bob.mkv"
+                 ]
+    , testEncode "chapters 5"
+                 (base_req & chapters ⊢ (Chapters ∘ 𝕵 $ SingletonRange 5))
+                 [ "--input"   , "/nonesuch"
+                 , "--title"   , "3"
+                 , "--markers"
+                 , "--deinterlace"
+                 , "--two-pass", "--turbo"
+                 , "--preset", "H.265 MKV 2160p60"
+                 , "--aencoder","copy"
+                 , "--audio"   , "2"
+                 , "--subtitle", "3,4", "--subtitle-default", "0"
+                 , "--quality" , "26.0"
+                 , "--chapters", "5"
                  , "--output"  , "/03-bob.mkv"
                  ]
     , testEncode "no two pass" (base_req & twoPass ⊢ NoTwoPass)

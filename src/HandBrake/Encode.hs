@@ -232,7 +232,7 @@ instance Parsecable Chapters where
 
 parseChapters ∷ Parser Chapters
 parseChapters =
-  option parsecReader (ю [ short 'c', long "chapters"
+  option parsecReader (ю [ short 'c', long "chapters", value (Chapters 𝕹)
                          , help "select chapters to encode" ])
 
 ------------------------------------------------------------
@@ -561,7 +561,7 @@ encodeArgs er = do
      and format that as `x` or `y-z`.  For a span range, the lower bound must be less than or equal to the upper bound;XXX  -}
 formatBoundedNRange ∷ (AsUsageError ε, MonadError ε μ) ⇒ Range ℕ → μ 𝕋
 formatBoundedNRange InfiniteRange      = throwUsage $ [fmtT|illegal range «-»|]
-formatBoundedNRange (SingletonRange n) = return $ [fmt|«%d»|] n
+formatBoundedNRange (SingletonRange n) = return $ [fmt|%d|] n
 formatBoundedNRange (LowerBoundRange (Bound a Inclusive)) =
   throwUsage $ [fmtT|illegal range «[%d-»|] a
 formatBoundedNRange (LowerBoundRange (Bound a Exclusive)) =
@@ -594,12 +594,5 @@ formatBoundedNRange (SpanRange (Bound a Exclusive) (Bound b Exclusive)) =
          LT → return $ [fmt|%d-%d|] (a+1) (b-1)
          EQ → return $ [fmt|%d|] (a+1)
          GT → throwUsage $ [fmtT|Range (%d-%d) is inverted|] a b
-{-
-  show (Chapters (𝕵 (LowerBoundRange a))) = [fmt|«%d-»|] (boundValue a)
-  show (Chapters (𝕵 (UpperBoundRange a))) = [fmt|«-%d»|] (boundValue a)
-  show (Chapters (𝕵 (InfiniteRange)))     = [fmt|«-»|]
-  show (Chapters (𝕵 (SpanRange a b)))     =
-    [fmt|«%d-%d»|] (boundValue a) (boundValue b)
--}
 
 -- that's all, folks! ----------------------------------------------------------
