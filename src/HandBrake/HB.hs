@@ -4,14 +4,10 @@ where
 
 -- base --------------------------------
 
-import Control.Monad       ( MonadFail, filterM, forM, forM_, return, when )
-import Data.Eq             ( Eq )
-import Data.Function       ( ($), (&) )
-import Data.List           ( nub, tails )
-import Data.List.NonEmpty  ( NonEmpty, toList )
+import Control.Monad       ( forM, return )
+import Data.Function       ( (&) )
+import Data.List.NonEmpty  ( NonEmpty, toList, unzip )
 import Data.Maybe          ( maybe )
-import Data.Ord            ( (>) )
-import Data.Tuple          ( snd )
 import Data.Word           ( Word8 )
 import GHC.Stack           ( HasCallStack )
 import System.IO           ( IO )
@@ -19,13 +15,7 @@ import Text.Show           ( show )
 
 -- base-unicode-symbols ----------------
 
-import Data.Bool.Unicode      ( (∨) )
-import Data.Eq.Unicode        ( (≡), (≢) )
 import Data.Function.Unicode  ( (∘) )
-
--- containers-plus ---------------------
-
-import ContainersPlus.Member  ( (∈) )
 
 -- data-textual ------------------------
 
@@ -38,32 +28,25 @@ import FPath.AbsFile           ( AbsFile )
 import FPath.Error.FPathError  ( AsFPathError, FPathIOError )
 import FPath.File              ( File )
 
--- lens --------------------------------
-
-import Control.Lens.Tuple  ( _2 )
-
 -- log-plus ----------------------------
 
-import Log  ( Log, warn )
+import Log  ( Log )
 
 -- logging-effect ----------------------
 
-import Control.Monad.Log  ( LoggingT, MonadLog )
+import Control.Monad.Log  ( LoggingT )
 
 -- mockio ------------------------------
 
-import MockIO  ( DoMock( DoMock, NoMock ) )
+import MockIO  ( DoMock )
 
 -- mockio-log --------------------------
 
-import MockIO.IOClass      ( IOClass( NoIO ) )
-import MockIO.Log          ( errIO' )
-import MockIO.MockIOClass  ( MockIOClass( MockIOClass ) )
+import MockIO.MockIOClass  ( MockIOClass )
 
 -- mockio-plus -------------------------
 
-import MockIO.Process            ( (!) )
-import MockIO.Process.MLCmdSpec  ( mkMLCmdW' )
+import MockIO.Process.MLCmdSpec  ( MLCmdSpec, mkMLCmdW' )
 
 -- monaderror-io -----------------------
 
@@ -72,20 +55,16 @@ import MonadError.IO.Error  ( AsIOError )
 
 -- monadio-plus ------------------------
 
-import MonadIO                        ( MonadIO )
+import MonadIO.Base                   ( getArgs )
 import MonadIO.Error.CreateProcError  ( AsCreateProcError )
 import MonadIO.Error.ProcExitError    ( AsProcExitError )
-import MonadIO.File                   ( devnull )
 import MonadIO.FPath                  ( getCwd, pResolve )
-import MonadIO.FStat                  ( FExists( FExists, NoFExists ), fexists )
 import MonadIO.Process.CmdSpec        ( cwd )
-import MonadIO.Process.ExitStatus     ( ExitStatus( ExitVal ) )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Bool     ( 𝔹 )
-import Data.MoreUnicode.Functor  ( (⊳), (⩺) )
-import Data.MoreUnicode.Lens     ( (⊣), (⊢) )
+import Data.MoreUnicode.Functor  ( (⊳) )
+import Data.MoreUnicode.Lens     ( (⊢) )
 import Data.MoreUnicode.Maybe    ( 𝕄, pattern 𝕵 )
 import Data.MoreUnicode.Monad    ( (≫) )
 import Data.MoreUnicode.Text     ( 𝕋 )
@@ -96,21 +75,17 @@ import Control.Monad.Except  ( ExceptT, MonadError )
 
 -- natural -----------------------------
 
-import Natural  ( ℕ, One, count, length )
+import Natural  ( ℕ )
 
 -- stdmain -----------------------------
 
-import StdMain             ( stdMain'' )
-import StdMain.StdOptions  ( DryRunLevel )
-import StdMain.UsageError  ( AsUsageError, UsageFPProcIOError, throwUsage )
+import StdMain             ( Overwrite( NoOverwrite )
+                           , checkRunNICmds', stdMain )
+import StdMain.UsageError  ( AsUsageError, UsageFPProcIOError )
 
 -- text --------------------------------
 
 import Data.Text  ( pack )
-
--- tfmt --------------------------------
-
-import Text.Fmt  ( fmtT )
 
 ------------------------------------------------------------
 --                     local imports                      --
@@ -118,120 +93,65 @@ import Text.Fmt  ( fmtT )
 
 import qualified HandBrake.Paths  as  Paths
 
-import HandBrake.Encode   ( EncodeDetails, details, encodeRequest1, encodeArgs )
-import HandBrake.Options  ( Options( Encode, Scan ), Overwrite( Overwrite )
+import HandBrake.Encode   ( EncodeDetails, EncodeRequest
+                          , details, encodeRequest1, encodeArgs )
+import HandBrake.Options  ( Options( Encode, Scan )
                           , parseOptions )
 
 --------------------------------------------------------------------------------
 
-scan ∷ ∀ ε μ .
-       (MonadIO μ, MonadError ε μ, Printable ε,
-        AsIOError ε, AsFPathError ε, AsCreateProcError ε, AsProcExitError ε,
-        MonadLog (Log MockIOClass) μ) ⇒
-       File → AbsDir → 𝕄 ℕ → DoMock → μ ()
-scan file wd stream_id do_mock = do
+scan ∷ File → AbsDir → 𝕄 ℕ → DoMock → MLCmdSpec()
+scan file wd stream_id do_mock =
   let args = [ "--scan"
              , "--input", toText file
              , "--title", maybe "0" (pack ∘ show) stream_id
              ]
-      cmd  = mkMLCmdW' Paths.handbrakeCLI args do_mock & cwd ⊢ 𝕵 wd
-  snd ⊳ (devnull ≫ \null → null ! cmd)
+   in mkMLCmdW' Paths.handbrakeCLI args do_mock & cwd ⊢ 𝕵 wd
 
 ----------------------------------------
 
-encArgs ∷ ∀ ε μ .
-       (MonadIO μ,
-        AsUsageError ε, AsIOError ε, AsFPathError ε, AsCreateProcError ε,
-        AsProcExitError ε,
-        MonadError ε μ, Printable ε,
-        MonadLog (Log MockIOClass) μ) ⇒
-       AbsFile → AbsDir → ℕ → 𝕋 → EncodeDetails → DoMock → μ ([𝕋], AbsFile)
+encArgs ∷ ∀ ε η . (AsUsageError ε, AsFPathError ε, MonadError ε η) ⇒
+           AbsFile → AbsDir → ℕ → 𝕋 → EncodeDetails
+         → η (DoMock → MLCmdSpec (),AbsFile)
 
-encArgs file output_dir stream_id name ds do_mock = do
-  fexists output_dir ≫ \ x → when (x ≡ NoFExists) $
-    let msg = [fmtT|No such output dir: %T|] output_dir
-     in case do_mock of
-          DoMock → warn (MockIOClass NoIO NoMock) msg
-          NoMock → throwUsage msg
-  let req = encodeRequest1 file output_dir stream_id (𝕵 name) & details ⊢ ds
-  encodeArgs req
-
-----------------------------------------
-
-{- | Execute an encode with given args, with stdin connected to devnull; return
-     0 in case of success (throw an exception otherwise). -}
-do_encode ∷ ∀ ε μ .
-            (MonadIO μ, MonadFail μ,
-             AsUsageError ε, AsIOError ε, AsFPathError ε, AsCreateProcError ε,
-             AsProcExitError ε,
-             MonadError ε μ, Printable ε,
-             MonadLog (Log MockIOClass) μ) ⇒
-            [𝕋] → DoMock → μ ()
-do_encode args do_mock = do
-  let cmd  = mkMLCmdW' Paths.handbrakeCLI args do_mock
-  (ExitVal 0,()) ← devnull ≫ \ null → null ! cmd
-  return ()
-
-----------------------------------------
-
-{- | Very cheap duplicate detector.  Each element e in the input list will be
-     cited (n-1) times in the output, where n is the number of occurences of e
-     in the input list.
- -}
-duplicates ∷ Eq α ⇒ [α] → [α]
-duplicates xs = [ y | x ← tails xs, length x > 1, let (y:ys) = x, y ∈ ys]
-
-{- | Check that a list of files contains no duplicates, and no extant files.
-     The `overwrite` argument, if true, skips the extant files check.
-     Errors will be logged (at `Error` level); and an exception will be thrown
-     unless `do_mock` is `DoMock`.
--}
-checkOutputFiles ∷ (MonadIO μ, MonadLog (Log MockIOClass) μ,
-                    AsIOError ε, AsUsageError ε, MonadError ε μ) ⇒
-                   [AbsFile] → 𝔹 → DoMock → μ ()
-checkOutputFiles fns overwrite do_mock = do
-  let dups = duplicates fns
-  extants ← if overwrite
-            then return []
-            else filterM ((≡ FExists) ⩺ fexists) (nub fns)
-
-  when (dups ≢ [] ∨ extants ≢ []) $ do
-    forM_ dups (\ d → errIO' $ [fmtT|duplicate output: %T|] d)
-    forM_ extants (\ e → errIO' $ [fmtT|output file already exists: %T|] e)
-    when (do_mock ≡ NoMock) $
-      throwUsage @𝕋 "duplicate or extant output files found"
+encArgs file output_dir stream_id name ds = do
+  let req ∷ EncodeRequest
+      req = encodeRequest1 file output_dir stream_id (𝕵 name) & details ⊢ ds
+  (args, outputf) ← encodeArgs req
+  return (mkMLCmdW' Paths.handbrakeCLI args, outputf)
 
 ----------------------------------------
 
 {- | Encode multiple titles from a single input file. -}
-encodes ∷ ∀ ε μ .
-          (MonadIO μ, MonadFail μ, Printable ε, MonadError ε μ,
-           AsUsageError ε, AsIOError ε, AsFPathError ε, AsCreateProcError ε,
-           AsProcExitError ε,
-           MonadLog (Log MockIOClass) μ) ⇒
-          AbsFile → AbsDir → NonEmpty (ℕ,𝕋) → EncodeDetails → Overwrite → DoMock
-        → μ ()
-encodes input output_dir ts ds ov do_mock = do
-  let enc_args (stream_id,name) =
-        encArgs input output_dir stream_id name ds do_mock
-  encFnArgs ∷ NonEmpty ([𝕋],AbsFile) ← forM ts enc_args
-  checkOutputFiles (toList $ (⊣ _2) ⊳ encFnArgs) (Overwrite ≡ ov) do_mock
-  forM_ (toList encFnArgs) (\ (args,_) → do_encode args do_mock )
+encodes ∷ ∀ ε μ . (MonadError ε μ, AsUsageError ε, AsFPathError ε) ⇒
+          AbsFile → AbsDir → NonEmpty (ℕ,𝕋) → EncodeDetails
+        → μ ([DoMock → MLCmdSpec ()], [AbsFile], [AbsDir])
+encodes input output_dir ts ds = do
+  let enc_args ∷ (ℕ,𝕋) → μ (DoMock → MLCmdSpec (), AbsFile)
+      enc_args (stream_id,name) = do
+        (mkCmd,outputf) ← encArgs input output_dir stream_id name ds
+        return (mkCmd,outputf)
+
+  (cmds,fns) ∷ (NonEmpty (DoMock → MLCmdSpec ()), NonEmpty AbsFile)
+             ← unzip ⊳ forM ts enc_args
+  return ((toList cmds),(toList fns),[output_dir])
 
 ----------------------------------------
 
 myMain ∷ ∀ ε .
          (HasCallStack, Printable ε, AsUsageError ε,
           AsIOError ε, AsProcExitError ε, AsCreateProcError ε, AsFPathError ε) ⇒
-         AbsDir → DryRunLevel One → Options
+         AbsDir → DoMock → Options
        → LoggingT (Log MockIOClass) (ExceptT ε IO) Word8
-myMain wd dry_run opts = do
-  let do_mock = if 0 ≢ count dry_run then DoMock else NoMock
-  case opts of
-    Scan   f n          → scan f wd n do_mock
+myMain wd do_mock opts = do
+  (overwrite,cmds,fns,dirs) ← case opts of
+    Scan   f n          → let cmd = scan f wd n
+                           in return (NoOverwrite,[cmd],[],[])
     Encode f ts ds d ov → do output_dir ← pResolve d
                              f'         ← pResolve f
-                             encodes f' output_dir ts ds ov do_mock
+                             (cmds,fns,dirs) ← encodes f' output_dir ts ds
+                             return (ov,cmds,fns,dirs)
+  checkRunNICmds' overwrite cmds fns dirs do_mock
   return 0
 
 ----------------------------------------
@@ -240,6 +160,6 @@ main ∷ IO ()
 main = do
   let progDesc = "HandBrakeCLI wrapper"
   wd ← ӝ (getCwd @FPathIOError)
-  stdMain'' progDesc (parseOptions wd) (myMain @UsageFPProcIOError wd)
+  getArgs ≫ stdMain progDesc (parseOptions wd) (myMain @UsageFPProcIOError wd)
 
 -- that's all, folks! ----------------------------------------------------------

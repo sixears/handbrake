@@ -1,14 +1,14 @@
 module HandBrake.Options
-  ( HasOptions, Options( Encode, Scan ), Overwrite(..)
+  ( HasOptions, Options( Encode, Scan )
   , details, input, outputDir, overwrite, parseOptions, titles )
 where
 
 -- base --------------------------------
 
 import Control.Applicative   ( many, optional )
-import Data.Eq               ( Eq )
 import Data.List.NonEmpty    ( NonEmpty( (:|) ) )
 import Data.Function         ( ($), id )
+import System.IO             ( FilePath )
 import Text.Show             ( Show )
 
 -- base-unicode-symbols ----------------
@@ -18,10 +18,10 @@ import Data.Monoid.Unicode    ( (⊕) )
 
 -- fpath -------------------------------
 
-import FPath.AbsDir     ( AbsDir )
-import FPath.Dir        ( Dir( DirA ) )
-import FPath.File       ( File )
-import FPath.Parseable  ( Parseable( readM ) )
+import FPath.AbsDir      ( AbsDir )
+import FPath.AsFilePath  ( filepath )
+import FPath.File        ( File )
+import FPath.Parseable   ( Parseable( readM ) )
 
 -- lens --------------------------------
 
@@ -31,6 +31,7 @@ import Control.Lens.Lens  ( Lens', lens )
 
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
+import Data.MoreUnicode.Lens         ( (⫥) )
 import Data.MoreUnicode.Maybe        ( 𝕄 )
 import Data.MoreUnicode.Monoid       ( ю )
 import Data.MoreUnicode.Text         ( 𝕋 )
@@ -42,10 +43,14 @@ import Natural  ( ℕ )
 -- optparse-applicative ----------------
 
 import Options.Applicative.Builder  ( argument, auto, command, flag, help, info
-                                    , metavar, long, option, progDesc, short
-                                    , value )
+                                    , metavar, long, progDesc, short
+                                    , strOption, value )
 import Options.Applicative.Extra    ( hsubparser )
 import Options.Applicative.Types    ( Parser, ParserInfo )
+
+-- stdmain -----------------------------
+
+import StdMain  ( Overwrite( NoOverwrite, Overwrite ) )
 
 ------------------------------------------------------------
 --                     local imports                      --
@@ -55,16 +60,11 @@ import HandBrake.Encode  ( EncodeDetails, parseEncodeDetails, readNT )
 
 --------------------------------------------------------------------------------
 
-data Overwrite = Overwrite | NoOverwrite
-  deriving (Eq,Show)
-
-------------------------------------------------------------
-
 data Options = Scan File (𝕄 ℕ)
              | Encode { _input     ∷ File
                       , _titles    ∷ NonEmpty (ℕ,𝕋)
                       , _details   ∷ EncodeDetails
-                      , _outputDir ∷ Dir
+                      , _outputDir ∷ FilePath
                       , _overwrite ∷ Overwrite
                       }
   deriving Show
@@ -79,7 +79,7 @@ class HasOptions α where
   titles    = _Options ∘ titles
   details   ∷ Lens' α EncodeDetails
   details   = _Options ∘ details
-  outputDir ∷ Lens' α Dir
+  outputDir ∷ Lens' α FilePath
   outputDir = _Options ∘ outputDir
   overwrite ∷ Lens' α Overwrite
   overwrite = _Options ∘ overwrite
@@ -122,8 +122,8 @@ parseEncode d =
         Encode ⊳ argument readM (metavar "HOSTS.dhall")
                ⊵ parseNE parseNT
                ⊵ parseEncodeDetails
-               ⊵ (option readM (ю [ short 'd', long "output-dir"
-                                  , help "output dir", value $ DirA d]))
+               ⊵ (strOption (ю [ short 'd', long "output-dir"
+                                  , help "output dir", value $ d ⫥ filepath]))
                ⊵ flag NoOverwrite Overwrite (ю [ short 'O', long "overwrite"
                                                , help "overwrite extant files"])
    in

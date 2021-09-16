@@ -1,3 +1,7 @@
+1.0.2.0 2021-09-16
+==================
+- Better output file/dir checking, factored into stdmain
+
 1.0.1.1 2021-08-23
 ==================
 - Fix chapter handling, so (a) -c is optional again (defaulting to "all
