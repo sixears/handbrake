@@ -1,3 +1,7 @@
+1.0.2.1 2021-10-13
+==================
+- upgrade dependencies
+
 1.0.2.0 2021-09-16
 ==================
 - Better output file/dir checking, factored into stdmain
