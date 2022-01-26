@@ -1,8 +1,8 @@
 module HandBrake.Encode
-  ( AudioCopy(..), AudioTracks(..), Chapters(..), EncodeDetails, EncodeRequest
-  , Numbering(..), Profile(..), SubtitleTracks( SubtitleTracks ), TwoPass(..)
+  ( AudioTracks(..), Chapters(..), EncodeDetails, EncodeRequest, Numbering(..)
+  , Profile(..), SubtitleTracks( SubtitleTracks ), TwoPass(..)
 
-  , audioCopy, audios, chapters, details, encodeArgs, encodeRequest
+  , audioEncoder, audios, chapters, details, encodeArgs, encodeRequest
   , encodeRequest1, input, name, numbering, options, outputDir, outputName
   , profile, quality, subtitles, titleID, twoPass
 
@@ -77,7 +77,7 @@ import Control.Monad.Except  ( MonadError )
 -- optparse-applicative ----------------
 
 import Options.Applicative.Builder  ( auto, flag, flag', help
-                                    , long, option, short, value )
+                                    , long, option, short, strOption, value )
 import Options.Applicative.Types    ( Parser )
 
 -- optparse-plus -----------------------
@@ -135,11 +135,6 @@ parseTwoPass = flag TwoPass NoTwoPass
 
 ------------------------------------------------------------
 
-data AudioCopy = AudioCopy | NoAudioCopy
-  deriving (Eq,Generic,NFData,Show)
-
-------------------------------------------------------------
-
 data Numbering = NoNumber
                | Number ℤ       {- with output offset -}
                | Series (ℕ,𝕋) ℤ {- title, series number, output offset -}
@@ -165,6 +160,10 @@ parseNumbering =
 
 data Profile   = ProfileH265_2160P | ProfileH265_1080P | ProfileH265_720P
                | ProfileH265_576P  | ProfileH265_480P
+               -- Dead Video is a super-simple video profile, meant for
+               -- throwaway video (e.g., tracks where the video is static,
+               -- that we'll later just rip the audio from)
+               | Profile_DeadVideo
   deriving (Eq,Generic,NFData,Show)
 
 instance Printable Profile where
@@ -173,6 +172,7 @@ instance Printable Profile where
   print ProfileH265_720P  = P.text "H.265 MKV 720p30"
   print ProfileH265_576P  = P.text "H.265 MKV 576p25"
   print ProfileH265_480P  = P.text "H.265 MKV 480p30"
+  print Profile_DeadVideo = P.text "H.265 MKV 480p30"
 
 instance Parsecable Profile where
   parser = let names ∷ CharParsing ψ ⇒ (NonEmpty (ψ Profile))
@@ -182,6 +182,7 @@ instance Parsecable Profile where
                        , pure ProfileH265_720P  ⋪ string  "720"
                        , pure ProfileH265_576P  ⋪ string  "576"
                        , pure ProfileH265_480P  ⋪ string  "480"
+                       , pure Profile_DeadVideo ⋪ string  "D"
                        ]
             in tries names ⋪ optional (char 'p' ∤ char 'P') ⋪ eof
 
@@ -249,29 +250,30 @@ parseQuality =
 
 ----------------------------------------
 
-parseAudioCopy ∷ Parser AudioCopy
-parseAudioCopy = flag NoAudioCopy AudioCopy
-                      (ю [ long "no-ac", long "no-audio-copy"
-                         , help "disable audio copy (re-encode audio)" ])
-
-----------------------------------------
-
 parseOutputName ∷ Parser (𝕄 PathComponent)
 parseOutputName =
   let mods = ю [ short 'o', long "output", help "output file base name" ]
    in optional (option readM mods)
 
+----------------------------------------
+
+parseAudioEncoder ∷ Parser (𝕄 𝕋)
+parseAudioEncoder =
+  let mods = ю [ short 'E', long "aencoder", long "audio-encoder"
+               , help "set audio encoder(s) (see HandBrakeCLI -E)" ]
+   in optional (strOption mods)
+
 ------------------------------------------------------------
 
 {- | Options that have standard values, but may be adjusted for encodes. -}
-data EncodeOptions = EncodeOptions { _numbering   ∷ Numbering
-                                   , _chapters    ∷ Chapters
-                                   , _twoPass     ∷ TwoPass
-                                   , _profile     ∷ Profile
+data EncodeOptions = EncodeOptions { _numbering    ∷ Numbering
+                                   , _chapters     ∷ Chapters
+                                   , _twoPass      ∷ TwoPass
+                                   , _profile      ∷ Profile
                                    -- 20 is default, use 26 for 1080p
-                                   , _quality     ∷ Float
-                                   , _audioCopy   ∷ AudioCopy
-                                   , _outputName  ∷ 𝕄 PathComponent
+                                   , _quality      ∷ Float
+                                   , _outputName   ∷ 𝕄 PathComponent
+                                   , _audioEncoder ∷ 𝕄 𝕋
                                    }
   deriving Show
 
@@ -289,20 +291,20 @@ class HasEncodeOptions α where
   profile        = _EncodeOptions ∘ profile
   quality        ∷ Lens' α Float
   quality        = _EncodeOptions ∘ quality
-  audioCopy      ∷ Lens' α AudioCopy
-  audioCopy      = _EncodeOptions ∘ audioCopy
   outputName     ∷ Lens' α (𝕄 PathComponent)
   outputName     = _EncodeOptions ∘ outputName
+  audioEncoder   ∷ Lens' α (𝕄 𝕋)
+  audioEncoder   = _EncodeOptions ∘ audioEncoder
 
 instance HasEncodeOptions EncodeOptions where
   _EncodeOptions = id
-  numbering      = lens _numbering   (\ eo x → eo { _numbering   = x })
-  chapters       = lens _chapters    (\ eo x → eo { _chapters    = x })
-  twoPass        = lens _twoPass     (\ eo x → eo { _twoPass     = x })
-  profile        = lens _profile     (\ eo x → eo { _profile     = x })
-  quality        = lens _quality     (\ eo x → eo { _quality     = x })
-  audioCopy      = lens _audioCopy   (\ eo x → eo { _audioCopy   = x })
-  outputName     = lens _outputName  (\ eo n → eo { _outputName  = n })
+  numbering      = lens _numbering    (\ eo x → eo { _numbering    = x })
+  chapters       = lens _chapters     (\ eo x → eo { _chapters     = x })
+  twoPass        = lens _twoPass      (\ eo x → eo { _twoPass      = x })
+  profile        = lens _profile      (\ eo x → eo { _profile      = x })
+  quality        = lens _quality      (\ eo x → eo { _quality      = x })
+  audioEncoder   = lens _audioEncoder (\ eo x → eo { _audioEncoder = x })
+  outputName     = lens _outputName   (\ eo n → eo { _outputName   = n })
 
 ----------------------------------------
 
@@ -311,10 +313,10 @@ parseEncodeOptions =
   EncodeOptions ⊳ parseNumbering
                 ⊵ parseChapters
                 ⊵ parseTwoPass
-                ⊵ parseProfile -- pure ProfileH265_2160P
+                ⊵ parseProfile
                 ⊵ parseQuality
-                ⊵ parseAudioCopy
                 ⊵ parseOutputName
+                ⊵ parseAudioEncoder
 
 ------------------------------------------------------------
 
@@ -472,13 +474,13 @@ encodeRequest i d t n as =
                     , _subtitles = SubtitleTracks $ []
                     , _options   =
                       EncodeOptions
-                        { _numbering   = Number 0
-                        , _chapters    = Chapters 𝕹
-                        , _twoPass     = TwoPass
-                        , _profile     = ProfileH265_2160P
-                        , _quality     = defaultQuality
-                        , _audioCopy   = AudioCopy
-                        , _outputName  = 𝕹
+                        { _numbering    = Number 0
+                        , _chapters     = Chapters 𝕹
+                        , _twoPass      = TwoPass
+                        , _profile      = ProfileH265_2160P
+                        , _quality      = defaultQuality
+                        , _outputName   = 𝕹
+                        , _audioEncoder = 𝕹
                         }
                     }
                 }
@@ -534,15 +536,20 @@ encodeArgs er = do
   let args = ю [ [ "--input" , toText $ er ⊣ input
                  , "--title" , pack (show $ er ⊣ titleID)
                  , "--markers" -- chapter markers
-                 , "--deinterlace"
                  ]
+               , if er ⊣ profile ≡ Profile_DeadVideo then []
+                                                     else [ "--deinterlace" ]
+               , [ "--audio-copy-mask"
+                 , "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac" ]
                , case er ⊣ twoPass of
-                   TwoPass   → [ "--two-pass", "--turbo" ]
+                   TwoPass   → if er ⊣ profile ≡ Profile_DeadVideo
+                               then []
+                               else [ "--two-pass", "--turbo" ]
                    NoTwoPass → []
                , [ "--preset", toText $ er ⊣ profile ]
-               , case er ⊣ audioCopy of
-                   AudioCopy   → [ "--aencoder", "copy" ]
-                   NoAudioCopy → []
+               , case er ⊣ audioEncoder of
+                   𝕹   → [ "--aencoder", "copy" ]
+                   𝕵 t → [ "--aencoder", t ]
                , [ "--audio", [fmt|%L|] (show ⊳ unAudioTracks (er ⊣ audios)) ]
                , case unSubtitleTracks (er ⊣ subtitles) of
                    [] → []
@@ -558,7 +565,9 @@ encodeArgs er = do
   return (args,output)
 
 {- | Take a range, which must be a single SingletonRange or a single SpanRange,
-     and format that as `x` or `y-z`.  For a span range, the lower bound must be less than or equal to the upper bound;XXX  -}
+     and format that as `x` or `y-z`.  For a span range, the lower bound must be
+     less than or equal to the upper bound; XXX
+ -}
 formatBoundedNRange ∷ (AsUsageError ε, MonadError ε μ) ⇒ Range ℕ → μ 𝕋
 formatBoundedNRange InfiniteRange      = throwUsage $ [fmtT|illegal range «-»|]
 formatBoundedNRange (SingletonRange n) = return $ [fmt|%d|] n

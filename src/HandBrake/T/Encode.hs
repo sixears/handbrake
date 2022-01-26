@@ -56,13 +56,14 @@ import TastyPlus  ( (≟), assertLeft, assertListEqR
 --                     local imports                      --
 ------------------------------------------------------------
 
-import HandBrake.Encode  ( AudioCopy( NoAudioCopy ), AudioTracks( AudioTracks )
+import HandBrake.Encode  ( AudioTracks( AudioTracks )
                          , Chapters( Chapters )
                          , Numbering( NoNumber, Number, Series )
-                         , Profile( ProfileH265_576P, ProfileH265_720P )
+                         , Profile( ProfileH265_576P, ProfileH265_720P
+                                  , Profile_DeadVideo )
                          , SubtitleTracks( SubtitleTracks )
                          , TwoPass( NoTwoPass )
-                         , audioCopy, audios, chapters, encodeArgs
+                         , audios, audioEncoder, chapters, encodeArgs
                          , encodeRequest, input, name, numbering, outputDir
                          , outputName, profile, quality, subtitles, titleID
                          , twoPass
@@ -89,6 +90,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder", "copy"
@@ -102,6 +104,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -118,6 +121,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -131,6 +135,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -145,6 +150,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -159,6 +165,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -174,6 +181,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -188,6 +196,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
                  , "--audio"   , "2"
@@ -200,6 +209,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 576p25"
                  , "--aencoder","copy"
@@ -213,6 +223,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -226,6 +237,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -238,6 +250,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder","copy"
@@ -246,13 +259,15 @@ tests =
                  , "--quality" , "22.5"
                  , "--output"  , "/03-bob.mkv"
                  ]
-    , testEncode "no audio copy" (base_req & audioCopy ⊢ NoAudioCopy)
+    , testEncode "no audio copy" (base_req & audioEncoder ⊢ 𝕵 "mp3")
                  [ "--input"   , "/nonesuch"
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
+                 , "--aencoder", "mp3"
                  , "--audio"   , "2"
                  , "--subtitle", "3,4", "--subtitle-default", "0"
                  , "--quality" , "26.0"
@@ -263,6 +278,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder", "copy"
@@ -282,6 +298,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder", "copy"
@@ -295,6 +312,7 @@ tests =
                  , "--title"   , "3"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--two-pass", "--turbo"
                  , "--preset", "H.265 MKV 2160p60"
                  , "--aencoder", "copy"
@@ -314,14 +332,40 @@ tests =
                            & audios ⊢ AudioTracks (2 :| [1])
                            & subtitles ⊢ SubtitleTracks []
                            & quality ⊢ 26
-                           & audioCopy ⊢ NoAudioCopy
+                           & audioEncoder ⊢ 𝕵 "flac24,av_aac"
                            & outputDir ⊢ [absdir|/outdir/|]
                            & outputName ⊩ [pc|out.mkv|])
                  [ "--input"   , "/not-here"
                  , "--title"   , "5"
                  , "--markers"
                  , "--deinterlace"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
                  , "--preset", "H.265 MKV 720p30"
+                 , "--aencoder", "flac24,av_aac"
+                 , "--audio"   , "2,1"
+                 , "--quality" , "26.0"
+                 , "--chapters", "7-9"
+                 , "--output"  , "/outdir/out.mkv"
+                 ]
+    , testEncode "dead video"
+                 (base_req & input ⊢ [absfile|/not-here|]
+                           & titleID ⊢ 5
+                           & numbering ⊢ Series (7,"T") 1
+                           & name ⊢ 𝕹
+                           & chapters ⊢ Chapters (𝕵 $ 7 +=+ 9)
+                           & profile ⊢ Profile_DeadVideo
+                           & audios ⊢ AudioTracks (2 :| [1])
+                           & subtitles ⊢ SubtitleTracks []
+                           & quality ⊢ 26
+                           & audioEncoder ⊢ 𝕵 "flac24,av_aac"
+                           & outputDir ⊢ [absdir|/outdir/|]
+                           & outputName ⊩ [pc|out.mkv|])
+                 [ "--input"   , "/not-here"
+                 , "--title"   , "5"
+                 , "--markers"
+                 , "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac"
+                 , "--preset", "H.265 MKV 480p30"
+                 , "--aencoder", "flac24,av_aac"
                  , "--audio"   , "2,1"
                  , "--quality" , "26.0"
                  , "--chapters", "7-9"

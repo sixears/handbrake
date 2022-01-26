@@ -1,3 +1,8 @@
+1.0.3.0 2022-01-26
+==================
+- replace --no-audio-copy with --aencoder
+- add 'd' profile (dead video)
+
 1.0.2.1 2021-10-13
 ==================
 - upgrade dependencies

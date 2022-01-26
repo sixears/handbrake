@@ -29,3 +29,4 @@ default.nix.bak
 cabal.project.local
 dist-newstyle/
 01.mkv
+sample.mkv
