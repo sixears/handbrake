@@ -158,7 +158,7 @@ myMain wd do_mock opts = do
 
 main ∷ IO ()
 main = do
-  let progDesc = "HandBrakeCLI wrapper"
+  let progDesc ∷ 𝕋 = "HandBrakeCLI wrapper"
   wd ← ӝ (getCwd @FPathIOError)
   getArgs ≫ stdMain progDesc (parseOptions wd) (myMain @UsageFPProcIOError wd)
 

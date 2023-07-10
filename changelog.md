@@ -1,3 +1,7 @@
+1.0.3.1 2023-07-10
+==================
+- upgrade dependencies, particularly stdmain to 1.6.1.1
+
 1.0.3.0 2022-01-26
 ==================
 - replace --no-audio-copy with --aencoder
