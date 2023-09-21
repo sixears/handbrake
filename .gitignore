@@ -30,3 +30,4 @@ cabal.project.local
 dist-newstyle/
 01.mkv
 sample.mkv
+src/HandBrake/Paths.hs
