@@ -1,3 +1,7 @@
+1.0.3.2 2023-09-21
+==================
+- src/HandBrake/Paths should be generated at build time
+
 1.0.3.1 2023-07-10
 ==================
 - upgrade dependencies, particularly stdmain to 1.6.1.1
